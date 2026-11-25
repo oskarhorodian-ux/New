@@ -1,0 +1,436 @@
+--[[
+    PROMPT AI LAUNCHER — STANDALONE
+    Server: https://promtai-server.onrender.com
+    This is a separate launcher. It does not modify Prompt Hacker.
+
+    Requirements:
+    - Roblox executor with request / http_request / syn.request support
+    - HTTP requests enabled by the executor
+    - The Render server must be Live
+
+    Notes:
+    - The server may sleep on Render Free. The first request can take a while.
+    - This launcher sends chat messages only. It does not execute returned code.
+]]
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local SERVER_URL = "https://promtai-server.onrender.com"
+local CHAT_ENDPOINT = SERVER_URL .. "/v1/chat"
+
+local requestFunction =
+    (syn and syn.request)
+    or http_request
+    or request
+
+if type(requestFunction) ~= "function" then
+    warn("[Prompt AI] HTTP request function not found in this executor.")
+end
+
+-- Remove an older copy of this launcher, if present.
+pcall(function()
+    local old = game:GetService("CoreGui"):FindFirstChild("PromptAI_Standalone")
+    if old then old:Destroy() end
+end)
+pcall(function()
+    local old = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("PromptAI_Standalone")
+    if old then old:Destroy() end
+end)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "PromptAI_Standalone"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local parented = false
+pcall(function()
+    gui.Parent = game:GetService("CoreGui")
+    parented = true
+end)
+if not parented then
+    gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local function corner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 10)
+    c.Parent = parent
+    return c
+end
+
+local function stroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or Color3.fromRGB(75, 95, 150)
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0
+    s.Parent = parent
+    return s
+end
+
+local function make(className, props, parent)
+    local obj = Instance.new(className)
+    for k, v in pairs(props or {}) do
+        obj[k] = v
+    end
+    obj.Parent = parent
+    return obj
+end
+
+local accent = Color3.fromRGB(95, 145, 255)
+local bg = Color3.fromRGB(13, 16, 27)
+local panelBg = Color3.fromRGB(21, 26, 42)
+local textColor = Color3.fromRGB(235, 240, 255)
+local muted = Color3.fromRGB(155, 166, 190)
+
+-- Floating launcher button
+local launcher = make("TextButton", {
+    Name = "LauncherButton",
+    Size = UDim2.fromOffset(142, 42),
+    Position = UDim2.new(0, 18, 0.5, -21),
+    BackgroundColor3 = Color3.fromRGB(26, 37, 66),
+    Text = "⚡ PROMPT AI",
+    TextColor3 = textColor,
+    TextSize = 15,
+    Font = Enum.Font.GothamBold,
+    AutoButtonColor = true,
+    ZIndex = 10
+}, gui)
+corner(launcher, 12)
+stroke(launcher, accent, 1.5, 0.15)
+
+-- Main panel
+local panel = make("Frame", {
+    Name = "MainPanel",
+    Size = UDim2.new(0, 430, 0, 500),
+    Position = UDim2.new(0.5, -215, 0.5, -250),
+    BackgroundColor3 = bg,
+    Visible = false,
+    ZIndex = 20
+}, gui)
+corner(panel, 16)
+stroke(panel, Color3.fromRGB(72, 105, 190), 1.4, 0.1)
+
+local sizeConstraint = Instance.new("UISizeConstraint")
+sizeConstraint.MinSize = Vector2.new(290, 360)
+sizeConstraint.MaxSize = Vector2.new(560, 680)
+sizeConstraint.Parent = panel
+
+local header = make("Frame", {
+    Size = UDim2.new(1, 0, 0, 54),
+    BackgroundColor3 = Color3.fromRGB(24, 32, 55),
+    ZIndex = 21
+}, panel)
+corner(header, 16)
+
+make("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.fromOffset(15, 0),
+    Size = UDim2.new(1, -100, 1, 0),
+    Text = "⚡ PROMPT AI",
+    TextColor3 = textColor,
+    TextSize = 18,
+    Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 22
+}, header)
+
+local close = make("TextButton", {
+    Size = UDim2.fromOffset(36, 34),
+    Position = UDim2.new(1, -45, 0, 10),
+    BackgroundColor3 = Color3.fromRGB(55, 63, 88),
+    Text = "×",
+    TextColor3 = textColor,
+    TextSize = 24,
+    Font = Enum.Font.Gotham,
+    ZIndex = 22
+}, header)
+corner(close, 9)
+
+local platform = "PC"
+local platformButton = make("TextButton", {
+    Position = UDim2.fromOffset(14, 65),
+    Size = UDim2.fromOffset(130, 32),
+    BackgroundColor3 = Color3.fromRGB(35, 47, 76),
+    Text = "Проект: PC  ▾",
+    TextColor3 = textColor,
+    TextSize = 12,
+    Font = Enum.Font.GothamSemibold,
+    ZIndex = 22
+}, panel)
+corner(platformButton, 8)
+
+local status = make("TextLabel", {
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 154, 0, 65),
+    Size = UDim2.new(1, -168, 0, 32),
+    Text = "Готов к подключению",
+    TextColor3 = muted,
+    TextSize = 11,
+    Font = Enum.Font.Gotham,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextWrapped = true,
+    ZIndex = 22
+}, panel)
+
+local chat = make("ScrollingFrame", {
+    Name = "Chat",
+    Position = UDim2.fromOffset(12, 108),
+    Size = UDim2.new(1, -24, 1, -174),
+    BackgroundColor3 = panelBg,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 4,
+    ScrollBarImageColor3 = accent,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ZIndex = 21
+}, panel)
+corner(chat, 10)
+
+local chatPadding = Instance.new("UIPadding")
+chatPadding.PaddingTop = UDim.new(0, 9)
+chatPadding.PaddingBottom = UDim.new(0, 9)
+chatPadding.PaddingLeft = UDim.new(0, 9)
+chatPadding.PaddingRight = UDim.new(0, 9)
+chatPadding.Parent = chat
+
+local list = Instance.new("UIListLayout")
+list.Padding = UDim.new(0, 8)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+list.Parent = chat
+
+local input = make("TextBox", {
+    Name = "MessageInput",
+    Position = UDim2.new(0, 12, 1, -55),
+    Size = UDim2.new(1, -86, 0, 42),
+    BackgroundColor3 = Color3.fromRGB(31, 38, 59),
+    PlaceholderText = "Напиши Prompt AI...",
+    PlaceholderColor3 = muted,
+    Text = "",
+    TextColor3 = textColor,
+    TextSize = 14,
+    Font = Enum.Font.Gotham,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Center,
+    ClearTextOnFocus = false,
+    MultiLine = false,
+    ZIndex = 22
+}, panel)
+corner(input, 10)
+
+local inputPadding = Instance.new("UIPadding")
+inputPadding.PaddingLeft = UDim.new(0, 11)
+inputPadding.PaddingRight = UDim.new(0, 8)
+inputPadding.Parent = input
+
+local send = make("TextButton", {
+    Position = UDim2.new(1, -64, 1, -55),
+    Size = UDim2.fromOffset(52, 42),
+    BackgroundColor3 = accent,
+    Text = "➤",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 20,
+    Font = Enum.Font.GothamBold,
+    ZIndex = 22
+}, panel)
+corner(send, 10)
+
+local function refreshCanvas()
+    task.defer(function()
+        chat.CanvasPosition = Vector2.new(0, math.max(0, chat.AbsoluteCanvasSize.Y))
+    end)
+end
+
+local function addMessage(who, message, isUser)
+    local bubble = make("Frame", {
+        BackgroundColor3 = isUser and Color3.fromRGB(43, 65, 112) or Color3.fromRGB(34, 42, 63),
+        Size = UDim2.new(1, -4, 0, 40),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ZIndex = 22
+    }, chat)
+    corner(bubble, 9)
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.Parent = bubble
+
+    local label = make("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Text = who .. "\n" .. tostring(message),
+        TextColor3 = textColor,
+        TextSize = 13,
+        Font = Enum.Font.Gotham,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        ZIndex = 23
+    }, bubble)
+
+    refreshCanvas()
+end
+
+local function setStatus(message, color)
+    status.Text = message
+    status.TextColor3 = color or muted
+end
+
+addMessage("Prompt AI", "Привет! Я на связи. Напиши, что нужно сделать с кодом. Пока я отвечаю через твой сервер Render.", false)
+
+platformButton.MouseButton1Click:Connect(function()
+    platform = platform == "PC" and "Mobile" or "PC"
+    platformButton.Text = "Проект: " .. platform .. "  ▾"
+end)
+
+local busy = false
+local function sendMessage()
+    if busy then return end
+    local message = input.Text
+    if not message or message:gsub("%s", "") == "" then return end
+
+    if type(requestFunction) ~= "function" then
+        addMessage("Ошибка", "В этом executor нет поддерживаемой HTTP-функции (request / http_request / syn.request).", false)
+        setStatus("HTTP недоступен", Color3.fromRGB(255, 120, 120))
+        return
+    end
+
+    input.Text = ""
+    addMessage("Ты", message, true)
+    busy = true
+    send.Text = "..."
+    send.AutoButtonColor = false
+    setStatus("Отправляю запрос серверу...", accent)
+
+    task.spawn(function()
+        local ok, response = pcall(function()
+            return requestFunction({
+                Url = CHAT_ENDPOINT,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = HttpService:JSONEncode({
+                    message = message,
+                    platform = platform
+                })
+            })
+        end)
+
+        if not ok then
+            addMessage("Ошибка соединения", tostring(response), false)
+            setStatus("Не удалось связаться с сервером", Color3.fromRGB(255, 120, 120))
+        else
+            local statusCode = response and (response.StatusCode or response.Status)
+            local body = response and (response.Body or response.body)
+
+            if not body then
+                addMessage("Ошибка", "Сервер вернул пустой ответ. Проверь HTTP API executor.", false)
+                setStatus("Пустой ответ", Color3.fromRGB(255, 120, 120))
+            else
+                local decodedOk, decoded = pcall(function()
+                    return HttpService:JSONDecode(body)
+                end)
+
+                if decodedOk and decoded and decoded.reply then
+                    addMessage("Prompt AI", decoded.reply, false)
+                    setStatus("Ответ получен", Color3.fromRGB(120, 220, 160))
+                elseif decodedOk and decoded and decoded.error then
+                    addMessage("Ошибка сервера", decoded.error, false)
+                    setStatus("Ошибка API (" .. tostring(statusCode) .. ")", Color3.fromRGB(255, 120, 120))
+                else
+                    addMessage("Ответ сервера", tostring(body), false)
+                    setStatus("Неожиданный формат ответа", Color3.fromRGB(255, 190, 100))
+                end
+            end
+        end
+
+        busy = false
+        send.Text = "➤"
+        send.AutoButtonColor = true
+    end)
+end
+
+send.MouseButton1Click:Connect(sendMessage)
+input.FocusLost:Connect(function(enterPressed)
+    if enterPressed then sendMessage() end
+end)
+
+close.MouseButton1Click:Connect(function()
+    panel.Visible = false
+end)
+
+launcher.MouseButton1Click:Connect(function()
+    panel.Visible = not panel.Visible
+    if panel.Visible then
+        panel.Size = UDim2.new(0, 400, 0, 460)
+        TweenService:Create(
+            panel,
+            TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { Size = UDim2.new(0, 430, 0, 500) }
+        ):Play()
+    end
+end)
+
+-- Drag the panel by its header (mouse or touch).
+local dragging = false
+local dragInput, dragStart, startPos
+
+header.InputBegan:Connect(function(inputObject)
+    if inputObject.UserInputType == Enum.UserInputType.MouseButton1
+        or inputObject.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = inputObject.Position
+        startPos = panel.Position
+        inputObject.Changed:Connect(function()
+            if inputObject.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+header.InputChanged:Connect(function(inputObject)
+    if inputObject.UserInputType == Enum.UserInputType.MouseMovement
+        or inputObject.UserInputType == Enum.UserInputType.Touch then
+        dragInput = inputObject
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(inputObject)
+    if dragging and inputObject == dragInput then
+        local delta = inputObject.Position - dragStart
+        panel.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Fit the panel to smaller mobile screens.
+local function applyResponsiveSize()
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local viewport = camera.ViewportSize
+    if viewport.X < 600 then
+        panel.Size = UDim2.new(1, -24, 0.78, 0)
+        panel.Position = UDim2.new(0, 12, 0.11, 0)
+    else
+        panel.Size = UDim2.fromOffset(430, 500)
+        panel.Position = UDim2.new(0.5, -215, 0.5, -250)
+    end
+end
+
+applyResponsiveSize()
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveSize)
+end
+
+print("[Prompt AI] Standalone launcher loaded.")
