@@ -1,0 +1,101 @@
+-- =========================================================
+-- PROMPT_HACKER LAUNCHER • PHONE / PC
+-- Выбор запускает отдельную Mobile или PC сборку.
+-- =========================================================
+
+local MOBILE_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Prompt_Hacker_v3_6_MOBILE_LATEST.txt"
+local PC_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Prompt_Hacker_v3_6_PC_LATEST.txt"
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "PromptHackerLauncher"
+gui.ResetOnSpawn = false
+
+local parent
+pcall(function()
+    parent = game:GetService("CoreGui")
+end)
+
+local parentOk = false
+if parent then
+    parentOk = pcall(function()
+        gui.Parent = parent
+    end)
+end
+if not parentOk then
+    gui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 390, 0, 190)
+frame.Position = UDim2.new(0.5, -195, 0.5, -95)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 29)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 38)
+title.Position = UDim2.new(0, 10, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "PROMPT_HACKER • ВЫБЕРИ УСТРОЙСТВО"
+title.TextColor3 = Color3.fromRGB(255, 220, 70)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 16
+title.Parent = frame
+
+local function launch(url, label)
+    if not url or url == "" then
+        warn("[Prompt_Hacker Launcher] Не указана ссылка для " .. label .. ".")
+        return
+    end
+
+    local ok, err = pcall(function()
+        local source = game:HttpGet(url)
+        if type(source) ~= "string" or source == "" then
+            error("GitHub вернул пустой скрипт")
+        end
+
+        local fn, compileErr = loadstring(source)
+        if not fn then
+            error(compileErr or "Ошибка компиляции loadstring")
+        end
+
+        gui:Destroy()
+        fn()
+    end)
+
+    if not ok then
+        warn("[Prompt_Hacker Launcher] Не удалось запустить " .. label .. ": " .. tostring(err))
+    end
+end
+
+local phone = Instance.new("TextButton")
+phone.Size = UDim2.new(0.44, 0, 0, 92)
+phone.Position = UDim2.new(0.04, 0, 0, 62)
+phone.BackgroundColor3 = Color3.fromRGB(45, 125, 75)
+phone.Text = "📱\nТЕЛЕФОН"
+phone.TextColor3 = Color3.new(1, 1, 1)
+phone.Font = Enum.Font.SourceSansBold
+phone.TextSize = 18
+phone.Parent = frame
+Instance.new("UICorner", phone).CornerRadius = UDim.new(0, 9)
+phone.MouseButton1Click:Connect(function()
+    launch(MOBILE_RAW_URL, "Mobile")
+end)
+
+local pc = Instance.new("TextButton")
+pc.Size = UDim2.new(0.44, 0, 0, 92)
+pc.Position = UDim2.new(0.52, 0, 0, 62)
+pc.BackgroundColor3 = Color3.fromRGB(55, 100, 165)
+pc.Text = "🖥️\nPC"
+pc.TextColor3 = Color3.new(1, 1, 1)
+pc.Font = Enum.Font.SourceSansBold
+pc.TextSize = 18
+pc.Parent = frame
+Instance.new("UICorner", pc).CornerRadius = UDim.new(0, 9)
+pc.MouseButton1Click:Connect(function()
+    launch(PC_RAW_URL, "PC")
+end)
