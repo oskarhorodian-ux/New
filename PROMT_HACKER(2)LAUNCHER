@@ -3,8 +3,8 @@
 -- Выбор запускает отдельную Mobile или PC сборку.
 -- =========================================================
 
-local MOBILE_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Promt_hacker(2)mobile.txt"
-local PC_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Promt_hacker(2)pc.txt"
+local MOBILE_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/refs/heads/main/Promt_hacker(2)mobile.txt"
+local PC_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/refs/heads/main/Promt_hacker(2)pc.txt"
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
