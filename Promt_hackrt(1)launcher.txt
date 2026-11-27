@@ -1,0 +1,172 @@
+-- =========================================================
+-- PROMT_HACKRT(1) LAUNCHER • PHONE / PC
+-- Исправленная загрузка для executor: HttpGet -> request fallback.
+-- =========================================================
+
+local MOBILE_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Promt_hacker%281%29mobile.txt"
+local PC_RAW_URL = "https://raw.githubusercontent.com/oskarhorodian-ux/New/main/Promt_hacker%281%29pc.txt"
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+if not player then
+    error("[Prompt_Hacker Launcher] LocalPlayer недоступен.")
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "PromptHackerLauncher"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 999999
+
+local parent
+pcall(function()
+    parent = game:GetService("CoreGui")
+end)
+if not parent then
+    pcall(function()
+        if type(gethui) == "function" then
+            parent = gethui()
+        end
+    end)
+end
+if not parent then
+    parent = player:WaitForChild("PlayerGui")
+end
+gui.Parent = parent
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 390, 0, 218)
+frame.Position = UDim2.new(0.5, -195, 0.5, -109)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 29)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 38)
+title.Position = UDim2.new(0, 10, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "PROMT_HACKER(1) • ВЫБЕРИ УСТРОЙСТВО"
+title.TextColor3 = Color3.fromRGB(255, 220, 70)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 16
+title.Parent = frame
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -20, 0, 25)
+status.Position = UDim2.new(0, 10, 1, -30)
+status.BackgroundTransparency = 1
+status.Text = "Готов к запуску"
+status.TextColor3 = Color3.fromRGB(190, 190, 190)
+status.Font = Enum.Font.SourceSans
+status.TextSize = 13
+status.TextWrapped = true
+status.Parent = frame
+
+local function fetchSource(url)
+    local lastError
+
+    -- Основной способ, обычно поддерживается Roblox executors.
+    local ok, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok and type(result) == "string" and #result > 0 then
+        return result
+    end
+    lastError = tostring(result)
+
+    -- Резервный способ для executors с request API.
+    local requestFn =
+        (type(request) == "function" and request)
+        or (type(http_request) == "function" and http_request)
+        or (syn and type(syn.request) == "function" and syn.request)
+        or nil
+
+    if requestFn then
+        local reqOk, response = pcall(function()
+            return requestFn({
+                Url = url,
+                Method = "GET",
+                Headers = { ["Cache-Control"] = "no-cache" }
+            })
+        end)
+
+        if reqOk and type(response) == "table" then
+            local body = response.Body or response.body
+            local code = tonumber(response.StatusCode or response.Status or 200)
+            if code and code >= 200 and code < 300
+                and type(body) == "string" and #body > 0 then
+                return body
+            end
+            lastError = "HTTP " .. tostring(code) .. ": " .. tostring(body)
+        elseif not reqOk then
+            lastError = tostring(response)
+        end
+    end
+
+    error("Не удалось скачать файл. " .. tostring(lastError))
+end
+
+local busy = false
+local function launch(url, label)
+    if busy then return end
+    busy = true
+    status.Text = "Загрузка " .. label .. "..."
+    status.TextColor3 = Color3.fromRGB(255, 220, 90)
+
+    task.spawn(function()
+        local ok, err = pcall(function()
+            if type(loadstring) ~= "function" then
+                error("Executor не поддерживает loadstring.")
+            end
+
+            local source = fetchSource(url)
+            if not source or source == "" then
+                error("GitHub вернул пустой файл.")
+            end
+
+            local chunk, compileError = loadstring(source)
+            if not chunk then
+                error("Ошибка компиляции: " .. tostring(compileError))
+            end
+
+            status.Text = "Запускаю " .. label .. "..."
+            chunk()
+            gui:Destroy()
+        end)
+
+        if not ok then
+            busy = false
+            status.Text = "Ошибка: " .. tostring(err)
+            status.TextColor3 = Color3.fromRGB(255, 100, 100)
+            warn("[Prompt_Hacker Launcher] " .. tostring(err))
+        end
+    end)
+end
+
+local phone = Instance.new("TextButton")
+phone.Size = UDim2.new(0.44, 0, 0, 92)
+phone.Position = UDim2.new(0.04, 0, 0, 62)
+phone.BackgroundColor3 = Color3.fromRGB(45, 125, 75)
+phone.Text = "📱\nТЕЛЕФОН"
+phone.TextColor3 = Color3.new(1, 1, 1)
+phone.Font = Enum.Font.SourceSansBold
+phone.TextSize = 18
+phone.Parent = frame
+Instance.new("UICorner", phone).CornerRadius = UDim.new(0, 9)
+phone.MouseButton1Click:Connect(function()
+    launch(MOBILE_RAW_URL, "Mobile")
+end)
+
+local pc = Instance.new("TextButton")
+pc.Size = UDim2.new(0.44, 0, 0, 92)
+pc.Position = UDim2.new(0.52, 0, 0, 62)
+pc.BackgroundColor3 = Color3.fromRGB(55, 100, 165)
+pc.Text = "🖥️\nPC"
+pc.TextColor3 = Color3.new(1, 1, 1)
+pc.Font = Enum.Font.SourceSansBold
+pc.TextSize = 18
+pc.Parent = frame
+Instance.new("UICorner", pc).CornerRadius = UDim.new(0, 9)
+pc.MouseButton1Click:Connect(function()
+    launch(PC_RAW_URL, "PC")
+end)
